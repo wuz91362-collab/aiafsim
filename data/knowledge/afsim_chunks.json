@@ -1,20 +1,66 @@
 [
   {
-    "chunk_id": "DSL_001",
-    "category": "acoustic_signature",
-    "content": "acoustic_signature SIG_A ... spectrum_data ... end_spectrum_data ... end_acoustic_signature",
-    "keywords": ["acoustic", "signature", "spectrum", "freq", "noise_pressure"]
+    "chunk_id": "PLATFORM_001",
+    "category": "platform_basic_structure",
+    "content": "platform <platform_name> <platform_type>",
+    "keywords": ["platform", "platform_name", "platform_type"],
+    "description": "平台实例的基础结构，platform_name是自定义的名字不可重复，platform_type是平台类型"
   },
   {
-    "chunk_id": "DSL_002",
-    "category": "platform_type",
-    "content": "platform_type SUB_TYPE WSF_PLATFORM ... sensor SONAR_A ... end_sensor ... end_platform_type",
-    "keywords": ["platform_type", "sensor", "type", "icon", "platform"]
+    "chunk_id": "PLATFORM_002",
+    "category": "platform_side",
+    "content": "side <side_name>",
+    "keywords": ["side", "blue", "red"],
+    "description": "指定平台所属的阵营，如blue或red"
   },
   {
-    "chunk_id": "DSL_003",
-    "category": "platform_instance",
-    "content": "platform blue_sub SUB_TYPE side blue position 30n 30e route ... end_route end_platform",
-    "keywords": ["platform", "route", "position", "side", "kts", "deg"]
+    "chunk_id": "PLATFORM_003",
+    "category": "platform_position",
+    "content": "position <latitude> <longitude> altitude <altitude_value> <altitude_unit>",
+    "keywords": ["position", "latitude", "longitude", "altitude", "m", "ft", "agl"],
+    "description": "指定平台的位置和高度，纬度格式如30n或30:10:00.00n，经度格式如30e或30:10:00.00e"
+  },
+  {
+    "chunk_id": "PLATFORM_004",
+    "category": "platform_route",
+    "content": "route\n  position <latitude> <longitude> altitude <altitude_value> <altitude_unit>\n  speed <speed_value> <speed_unit>\n  position <latitude> <longitude> altitude <altitude_value> <altitude_unit>\nend_route",
+    "keywords": ["route", "position", "speed", "kts", "m/s"],
+    "description": "指定平台的路线，包含多个位置点和速度"
+  },
+  {
+    "chunk_id": "PLATFORM_005",
+    "category": "platform_heading",
+    "content": "heading <heading_value> deg",
+    "keywords": ["heading", "deg"],
+    "description": "指定平台的朝向，单位为度"
+  },
+  {
+    "chunk_id": "PLATFORM_006",
+    "category": "platform_complete",
+    "content": "platform <platform_name> <platform_type>\n  side <side_name>\n  route\n    position <latitude> <longitude> altitude <altitude_value> <altitude_unit>\n    speed <speed_value> <speed_unit>\n    position <latitude> <longitude> altitude <altitude_value> <altitude_unit>\n  end_route\n  heading <heading_value> deg\nend_platform",
+    "keywords": ["platform", "platform_name", "platform_type", "side", "route", "position", "speed", "heading"],
+    "description": "完整的平台实例定义，包含平台名称、类型、阵营、路线和朝向"
+  },
+  {
+    "chunk_id": "PLATFORM_007",
+    "category": "platform_example_1",
+    "content": "platform target1 ACOUSTIC_TARGET1\n  side blue\n  route\n    position 00:32s 00:00e altitude 600.00 ft\n    speed 100 kts\n    position 00:10n 00:00:00.00w altitude 600.00 ft\n  end_route\n  heading 360 deg\nend_platform",
+    "keywords": ["platform", "target1", "ACOUSTIC_TARGET1", "side", "blue", "route", "position", "altitude", "speed", "heading", "deg"],
+    "description": "平台实例示例：名称为target1，类型为ACOUSTIC_TARGET1，阵营为blue，包含路线和朝向"
+  },
+  {
+    "chunk_id": "PLATFORM_008",
+    "category": "platform_example_2",
+    "content": "platform blue_sub SUB_TYPE\n  side blue\n  position 30n 30e\n  route\n    position 30n 30e\n    speed 10 kts\n    position 31n 30e\n  end_route\nend_platform",
+    "keywords": ["platform", "blue_sub", "SUB_TYPE", "side", "blue", "position", "route", "speed", "kts"],
+    "description": "平台实例示例：潜艇平台，名称为blue_sub，类型为SUB_TYPE，阵营为blue"
+  },
+  {
+    "chunk_id": "PLATFORM_009",
+    "category": "platform_example_3",
+    "content": "platform player-1 ACOUSTIC_TARGET\n  position 29:30:57.34n 30e altitude 1500.00 ft\n  side blue\n  route\n    position 29:30:57.34n 30e altitude 1500.00 ft\n    speed 100 kts\n    position 30:40:37.43n 30e altitude 1500.00 ft\n  end_route\nend_platform",
+    "keywords": ["platform", "player-1", "ACOUSTIC_TARGET", "position", "altitude", "side", "blue", "route", "speed", "kts"],
+    "description": "平台实例示例：名称为player-1，类型为ACOUSTIC_TARGET，阵营为blue"
   }
 ]
+ 

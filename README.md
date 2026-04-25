@@ -5,7 +5,7 @@
 - LangGraph 状态机：`Generator -> Validator -> Debugger` 闭环
 - Validator 微服务（FastAPI）：执行 `afsim_cli --check` 并结构化错误
 - RAG 知识库接口：默认本地 JSON 检索，占位兼容 Chroma 向量检索
-- LLM 接口层：默认 `mock` 占位实现，已提供 Ollama 调用实现（适配 Qwen3）
+- LLM 接口层：直接调用 Ollama 真实模型（已适配 Qwen3）
 - 统一配置与启动入口
 
 ## 目录结构
@@ -19,7 +19,7 @@
 - `graph/workflow.py`：图编排与路由
 - `validator/`：校验执行、错误解析、API 路由
 - `rag/store.py`：知识库检索
-- `llm/client.py`：模型调用（mock / ollama）
+- `llm/client.py`：模型调用（ollama）
 
 `docker/validator/Dockerfile`：AFSIM 校验容器示例  
 `data/knowledge/afsim_chunks.json`：知识片段样例
@@ -88,30 +88,23 @@ curl http://localhost:8001/health
 - `CHROMA_PERSIST_DIRECTORY`：Chroma 持久化目录
 - `CHROMA_COLLECTION_NAME`：Chroma 集合名
 - `CHROMA_ENABLE_BOOTSTRAP`：当集合为空时，是否从 `KNOWLEDGE_FILE` 初始化
-- `LLM_BACKEND`：`mock` 或 `ollama`（默认 `mock`）
-- `OLLAMA_BASE_URL`：Ollama 地址（示例：`http://localhost:11434`）
-- `OLLAMA_MODEL`：模型名（示例：`qwen3:4b-instruct-2507`）
+- `OLLAMA_URL`：Ollama 生成接口（示例：`http://localhost:11434/api/generate`）
+- `OLLAMA_MODEL`：模型名（示例：`hopephoto/qwen3-4b-thinking-2507_q8`）
 - `OLLAMA_TIMEOUT_SECONDS`：模型调用超时秒数
 
 ## 切换到 Chroma + Ollama（Qwen3）
 
-默认配置下项目使用 JSON 检索和 mock 模型，便于无外部依赖联调。  
-当你在 Docker 中引入 Ollama 并加载 Qwen3 后，只需改 `.env`：
+默认配置下项目使用 JSON 检索，并直接走 Ollama 真模型。  
+当你使用 Chroma 检索时，只需改 `.env`：
 
 ```env
 RAG_BACKEND=chroma
-LLM_BACKEND=ollama
-OLLAMA_BASE_URL=http://ollama:11434
-OLLAMA_MODEL=qwen3:4b-instruct-2507
+OLLAMA_URL=http://localhost:11434/api/generate
+OLLAMA_MODEL=hopephoto/qwen3-4b-thinking-2507_q8
 ```
 
 说明：
 
 - 首次使用 `RAG_BACKEND=chroma` 且集合为空时，会自动把 `data/knowledge/afsim_chunks.json` 导入 Chroma。
-- 若 Ollama 暂不可达，代码会自动回退到 mock 生成策略，不会中断流程。
+- 若 Ollama 不可达，流程会直接抛出错误，便于你快速定位配置或网络问题。
 
-## 下一步建议
-
-- 在 Docker Compose 中加入 `ollama` 服务并做网络连通配置
-- 把 `acoustic_demo.txt` 等真实语料切块后导入 Chroma
-- 按 AFSIM 真实报错格式完善 `error_parser.py`

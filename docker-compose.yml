@@ -16,17 +16,16 @@ services:
       - CHROMA_PERSIST_DIRECTORY=data/chroma
       - CHROMA_COLLECTION_NAME=afsim_dsl
       - CHROMA_ENABLE_BOOTSTRAP=true
-      - LLM_BACKEND=mock
-      - OLLAMA_BASE_URL=http://ollama:11434
-      - OLLAMA_MODEL=qwen3:4b-instruct-2507
-      - OLLAMA_TIMEOUT_SECONDS=60
+      - OLLAMA_URL=http://localhost:11433/api/generate
+      - OLLAMA_MODEL=hopephoto/qwen3-4b-instruct-2507_q8
+      - OLLAMA_TIMEOUT_SECONDS=180
     volumes:
       # Mount offline AFSIM runtime from host.
       - ./afsim_bin:/opt/afsim:ro
       - ./data/chroma:/workspace/data/chroma
     restart: unless-stopped
 
-  # 后续引入时可取消注释，并将 validator 的 LLM_BACKEND 改为 ollama。
+  # 若使用 compose 内置 ollama，请将 OLLAMA_URL 改为 http://ollama:11434/api/generate。
   # ollama:
   #   image: ollama/ollama:latest
   #   container_name: ollama

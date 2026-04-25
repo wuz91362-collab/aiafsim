@@ -6,64 +6,25 @@ from urllib import error, request
 from app.config import settings
 
 
-class BaseLLMClient:
-    """定义脚本生成与修复能力的统一接口。"""
-
-    def generate_script(self, requirement: str, references: str) -> str:
-        """根据需求和参考片段生成 AFSIM 脚本。"""
-        raise NotImplementedError
-
-    def refine_script(self, script: str, errors: list[dict], references: str) -> str:
-        """根据校验错误对脚本进行修复。"""
-        raise NotImplementedError
-
-
-class MockLLMClient(BaseLLMClient):
-    """本地占位模型，保证无大模型环境也可运行流程。"""
-
-    def generate_script(self, requirement: str, references: str) -> str:
-        """返回可用于联调的固定模板脚本。"""
-        return (
-            f"# requirement\n{requirement}\n\n"
-            f"# references\n{references}\n\n"
-            "platform blue_sub WSF_PLATFORM\n"
-            "  side blue\n"
-            "  position 30n 30e\n"
-            "end_platform\n"
-        )
-
-    def refine_script(self, script: str, errors: list[dict], references: str) -> str:
-        """将错误摘要追加到脚本末尾，作为占位修复策略。"""
-        error_hint = "\n".join(
-            [f"- line {e.get('line', '?')}: {e.get('message', '')}" for e in errors]
-        )
-        return (
-            f"{script}\n"
-            f"# debug_references\n{references}\n"
-            f"# auto_fix_hints\n{error_hint}\n"
-        )
-
-
-class OllamaLLMClient(BaseLLMClient):
+class OllamaLLMClient:
     """通过 Ollama HTTP API 调用本地模型。"""
 
-    def __init__(self, base_url: str, model: str, timeout_seconds: int) -> None:
+    def __init__(self, ollama_url: str, model: str, timeout_seconds: int) -> None:
         """初始化 Ollama 连接配置。"""
-        self.base_url = base_url.rstrip("/")
+        self.ollama_url = ollama_url
         self.model = model
         self.timeout_seconds = timeout_seconds
 
     def _generate(self, prompt: str) -> str:
-        """调用 /api/generate 获取非流式文本结果。"""
-        url = f"{self.base_url}/api/generate"
+        """调用 Ollama generate 接口获取非流式文本结果。"""
         payload = {
             "model": self.model,
             "prompt": prompt,
             "stream": False,
-            "options": {"temperature": 0.1},
+            "options": {"temperature": 0.7},
         }
         req = request.Request(
-            url=url,
+            url=self.ollama_url,
             data=json.dumps(payload).encode("utf-8"),
             headers={"Content-Type": "application/json"},
             method="POST",
@@ -71,18 +32,40 @@ class OllamaLLMClient(BaseLLMClient):
         try:
             with request.urlopen(req, timeout=self.timeout_seconds) as resp:
                 body = json.loads(resp.read().decode("utf-8"))
-                return body.get("response", "").strip()
-        except (error.URLError, TimeoutError, json.JSONDecodeError):
-            # 大模型不可达时回退空字符串，由上层触发降级策略。
-            return ""
+                response = body.get("response", "").strip()
+                if not response:
+                    raise RuntimeError("Ollama 返回空响应，无法生成脚本。")
+                return response
+        except error.URLError as exc:
+            raise RuntimeError(f"Ollama 请求失败: {exc}") from exc
+        except TimeoutError as exc:
+            raise RuntimeError("Ollama 请求超时。") from exc
+        except json.JSONDecodeError as exc:
+            raise RuntimeError("Ollama 响应 JSON 解析失败。") from exc
 
     def generate_script(self, requirement: str, references: str) -> str:
         """使用 AFSIM 专家提示词生成脚本。"""
         prompt = f"""
 你是一位 AFSIM DSL 专家。请根据需求输出可校验通过的脚本。
+
+平台语法规则：
+1) 平台定义格式：platform <platform_name> <platform_type>
+2) 平台名称是自定义的，不可重复
+3) 平台类型必须是已定义的类型，如 SUB_TYPE, ACOUSTIC_TARGET 等
+4) 阵营定义：side <side_name>，如 blue 或 red
+5) 位置定义：position <latitude> <longitude> altitude <altitude_value> <altitude_unit>
+   - 纬度格式如 30n 或 30:10:00.00n
+   - 经度格式如 30e 或 30:10:00.00e
+   - 高度单位如 m, ft, agl
+6) 路线定义：route ... end_route
+   - 路线包含多个位置点和速度
+   - 速度定义：speed <speed_value> <speed_unit>，如 speed 10 kts
+7) 朝向定义：heading <heading_value> deg
+8) 所有块必须正确闭合，如 end_platform
+
 约束：
 1) 所有块必须正确闭合（如 end_platform / end_sensor）。
-2) 坐标、单位合法（hz, dB_20uPa, kts, deg）。
+2) 坐标、单位合法（hz, dB_20uPa, kts, deg, m, ft, agl）。
 3) 仅输出脚本正文，不要解释。
 
 需求：
@@ -91,10 +74,7 @@ class OllamaLLMClient(BaseLLMClient):
 参考片段：
 {references}
 """.strip()
-        generated = self._generate(prompt)
-        if generated:
-            return generated
-        return MockLLMClient().generate_script(requirement, references)
+        return self._generate(prompt)
 
     def refine_script(self, script: str, errors: list[dict], references: str) -> str:
         """根据错误信息请求模型返回修复后的完整脚本。"""
@@ -114,18 +94,13 @@ class OllamaLLMClient(BaseLLMClient):
 参考片段：
 {references}
 """.strip()
-        refined = self._generate(prompt)
-        if refined:
-            return refined
-        return MockLLMClient().refine_script(script, errors, references)
+        return self._generate(prompt)
 
 
-def build_llm_client() -> BaseLLMClient:
-    """按配置构建 LLM 客户端，默认使用本地占位实现。"""
-    if settings.llm_backend.lower() == "ollama":
-        return OllamaLLMClient(
-            base_url=settings.ollama_base_url,
-            model=settings.ollama_model,
-            timeout_seconds=settings.ollama_timeout_seconds,
-        )
-    return MockLLMClient()
+def build_llm_client() -> OllamaLLMClient:
+    """按配置构建 Ollama LLM 客户端。"""
+    return OllamaLLMClient(
+        ollama_url=settings.ollama_url,
+        model=settings.ollama_model,
+        timeout_seconds=settings.ollama_timeout_seconds,
+    )

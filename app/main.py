@@ -18,8 +18,9 @@ def run_once(requirement: str) -> dict:
 
 
 if __name__ == "__main__":
-    # 本地冒烟测试入口，便于快速手工验证流程是否可运行。
-    demo_requirement = "创建一个blue方潜艇平台，初始坐标30n 30e，速度10节向北"
+    # 创建一个blue方潜艇平台，初始坐标30n 30e，速度10节向北。
+    # 在终端输入需求
+    demo_requirement = input("请输入您的需求: ")
     result = run_once(demo_requirement)
     print("=== FINAL SCRIPT ===")
     print(result.get("current_script", ""))
