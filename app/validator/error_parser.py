@@ -9,6 +9,7 @@ ERROR_PATTERNS = [
 
 
 def parse_errors(stderr: str) -> list[dict]:
+    """将 AFSIM stderr 文本解析为结构化错误列表。"""
     errors: list[dict] = []
     for row in stderr.splitlines():
         for pattern in ERROR_PATTERNS:

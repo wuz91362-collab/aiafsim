@@ -9,7 +9,9 @@ from app.validator.error_parser import parse_errors
 
 
 def validate_script(script_content: str) -> dict:
+    """执行 AFSIM CLI 校验并统一返回结构化结果。"""
     with tempfile.TemporaryDirectory() as temp_dir:
+        # 使用临时文件隔离每次校验，避免并发时互相覆盖。
         script_path = Path(temp_dir) / "scenario.txt"
         script_path.write_text(script_content, encoding="utf-8")
 
@@ -31,7 +33,7 @@ def validate_script(script_content: str) -> dict:
                 "return_code": process.returncode,
             }
         except FileNotFoundError:
-            # Common in offline deployment when afsim_cli binary is not mounted yet.
+            # 离线部署中常见：AFSIM 可执行文件尚未挂载或路径配置错误。
             return {
                 "is_valid": False,
                 "errors": [

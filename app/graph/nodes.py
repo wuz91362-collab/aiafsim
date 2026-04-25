@@ -1,26 +1,21 @@
 from __future__ import annotations
 
-from app.config import settings
+from app.llm.client import build_llm_client
 from app.models.state import AgentState
-from app.rag.store import LocalKnowledgeStore
+from app.rag.store import build_knowledge_store
 from app.validator.service import validate_script
 
-knowledge_store = LocalKnowledgeStore(settings.knowledge_file)
+knowledge_store = build_knowledge_store()
+llm_client = build_llm_client()
 
 
 def generator_node(state: AgentState) -> AgentState:
+    """根据需求与检索上下文生成脚本初稿。"""
     chunks = knowledge_store.retrieve(state["requirement"], top_k=3)
     references = "\n".join([c.content for c in chunks]) if chunks else "# no references"
 
-    # Placeholder generator; replace with LLM call.
-    generated = (
-        f"# requirement\n{state['requirement']}\n\n"
-        f"# references\n{references}\n\n"
-        "platform blue_sub WSF_PLATFORM\n"
-        "  side blue\n"
-        "  position 30n 30e\n"
-        "end_platform\n"
-    )
+    # 由 LLM 客户端生成脚本；在未接通模型时会自动降级为占位实现。
+    generated = llm_client.generate_script(state["requirement"], references)
     return {
         "current_script": generated,
         "iteration": state["iteration"] + 1,
@@ -29,6 +24,7 @@ def generator_node(state: AgentState) -> AgentState:
 
 
 def validator_node(state: AgentState) -> AgentState:
+    """调用校验器执行脚本检查并写回错误列表。"""
     result = validate_script(state["current_script"])
     return {
         "errors": result["errors"],
@@ -37,18 +33,18 @@ def validator_node(state: AgentState) -> AgentState:
 
 
 def debugger_node(state: AgentState) -> AgentState:
+    """根据校验错误补充修复提示并推进迭代计数。"""
     if not state["errors"]:
         return {"history": ["no errors to fix"]}
 
-    # Placeholder refiner; replace with LLM-based targeted patching.
-    error_hint = "\n".join(
-        [f"- line {e.get('line', '?')}: {e.get('message', '')}" for e in state["errors"]]
+    debug_query = f"{state['requirement']}\n" + "\n".join(
+        [str(item.get("message", "")) for item in state["errors"]]
     )
-    refined = (
-        f"{state['current_script']}\n"
-        f"# auto_fix_hints\n{error_hint}\n"
-    )
+    chunks = knowledge_store.retrieve(debug_query, top_k=3)
+    references = "\n".join([c.content for c in chunks]) if chunks else "# no references"
+    refined = llm_client.refine_script(state["current_script"], state["errors"], references)
     return {
         "current_script": refined,
+        "iteration": state["iteration"] + 1,
         "history": ["debugger appended fix hints"],
     }
