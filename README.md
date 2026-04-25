@@ -42,6 +42,37 @@ uv run uvicorn app.validator.api:app --reload --port 8001
 uv run python -m app.main
 ```
 
+## Docker 与离线部署
+
+项目已支持“离线优先”镜像构建策略：
+
+- 如果 `wheelhouse/` 里有依赖包，Docker 构建时使用离线安装（`--no-index`）
+- 如果 `wheelhouse/` 为空，构建时回退在线安装（方便开发环境）
+
+### 1) 在联网机器准备离线依赖包
+
+```powershell
+./scripts/prepare_offline_bundle.ps1
+```
+
+执行后会把 `requirements.txt` 对应依赖下载到 `wheelhouse/`。
+
+### 2) 构建并启动容器（目标离线环境）
+
+请先将 AFSIM 运行时文件放到项目根目录 `afsim_bin/`（容器内挂载到 `/opt/afsim`）。
+
+```bash
+docker compose up -d --build
+```
+
+### 3) 健康检查
+
+```bash
+curl http://localhost:8001/health
+```
+
+返回 `{"status":"ok"}` 即启动成功。
+
 ## 环境变量
 
 参考 `.env.example`：
@@ -50,6 +81,7 @@ uv run python -m app.main
 - `VALIDATOR_TIMEOUT_SECONDS`：校验超时
 - `MAX_ITERATIONS`：最大修复迭代次数
 - `KNOWLEDGE_FILE`：知识库 JSON 路径
+- `AFSIM_CLI`：容器中建议设为 `/opt/afsim/afsim_cli`
 
 ## 下一步建议
 

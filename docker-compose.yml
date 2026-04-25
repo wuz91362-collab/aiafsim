@@ -1,0 +1,18 @@
+services:
+  validator:
+    build:
+      context: .
+      dockerfile: docker/app/Dockerfile
+    image: aiafsim-validator:local
+    container_name: aiafsim-validator
+    ports:
+      - "8001:8001"
+    environment:
+      - AFSIM_CLI=/opt/afsim/afsim_cli
+      - VALIDATOR_TIMEOUT_SECONDS=15
+      - MAX_ITERATIONS=3
+      - KNOWLEDGE_FILE=data/knowledge/afsim_chunks.json
+    volumes:
+      # Mount offline AFSIM runtime from host.
+      - ./afsim_bin:/opt/afsim:ro
+    restart: unless-stopped
