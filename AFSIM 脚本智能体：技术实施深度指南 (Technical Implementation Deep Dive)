@@ -1,0 +1,165 @@
+# AFSIM 脚本智能体：技术实施深度指南 (Technical Implementation Deep Dive)
+
+本指南旨在为开发团队提供直接可用的代码框架、配置模式和实施路径，确保 AI 智能体能够精准生成并通过 AFSIM 脚本校验。
+
+---
+
+## 1. 实施包 A：环境隔离与校验引擎 (Validator Engine)
+
+### 1.1 Docker 校验环境配置
+创建一个轻量级的 Docker 镜像，专门用于执行 AFSIM 命令行校验。
+
+**Dockerfile 示例：**
+```dockerfile
+FROM ubuntu:22.04
+# 安装 AFSIM 运行环境依赖
+RUN apt-get update && apt-get install -y libgl1-mesa-glx libglu1-mesa
+# 将 AFSIM 二进制文件和必要的库拷贝到镜像中
+COPY ./afsim_bin /opt/afsim
+ENV PATH="/opt/afsim:$PATH"
+WORKDIR /sandbox
+```
+
+### 1.2 Python 校验器封装
+编写一个包装器，用于安全调用 AFSIM CLI 并提取结构化错误。
+
+```python
+import subprocess
+import re
+
+def validate_afsim_script(script_path: str):
+    """
+    调用 AFSIM 命令行进行校验，并解析 stderr。
+    """
+    cmd = ["afsim_cli", "--check", script_path]
+    process = subprocess.run(cmd, capture_output=True, text=True)
+    
+    errors = []
+    # 示例解析逻辑：针对 AFSIM 典型的报错格式进行正则匹配
+    # 匹配格式如: "Error in file 'temp.txt' at line 15: Unexpected keyword 'mover'"
+    pattern = r"line (\d+): (.*)"
+    for line in process.stderr.split('\n'):
+        match = re.search(pattern, line)
+        if match:
+            errors.append({
+                "line": int(match.group(1)),
+                "message": match.group(2),
+                "raw": line
+            })
+    return {"is_valid": process.returncode == 0, "errors": errors}
+```
+
+---
+
+## 2. 实施包 B：知识库工程 (RAG & Prompt Engineering)
+
+### 2.1 结构化 DSL 知识库 (Vector Store)
+将 `acoustic_demo.txt` 拆解为“原子级”知识块进行存储，以便 AI 精确检索。
+
+| 知识块 ID | 类别 | 内容摘要 | 检索关键字 |
+| :--- | :--- | :--- | :--- |
+| `DSL_001` | 签名定义 | `acoustic_signature ... spectrum_data ... end_spectrum_data` | 频谱, 声纹, signature |
+| `DSL_002` | 平台类型 | `platform_type ... WSF_PLATFORM ... end_platform_type` | 平台定义, 类型, icon |
+| `DSL_003` | 传感器 | `sensor ... WSF_ACOUSTIC_SENSOR ... end_sensor` | 传感器, 声纳, background_noise |
+
+### 2.2 专家级 Prompt 模板
+使用 **Chain-of-Thought (CoT)** 引导 AI 逐步生成。
+
+```markdown
+### SYSTEM PROMPT
+你是一位 AFSIM 仿真专家。你的任务是根据需求编写 AFSIM DSL 脚本。
+必须严格遵守以下语法准则：
+1. **闭合原则**：所有以 `platform_type`, `sensor`, `platform`, `route` 开头的块必须以对应的 `end_...` 结束。
+2. **单位强制**：频率必须带 `hz`，压力带 `dB_20uPa`，速度带 `kts`，角度带 `deg`。
+3. **继承逻辑**：自定义 sensor 必须指定父类（如 `ACOUSTIC_BASE`）。
+
+### FEW-SHOT EXAMPLES
+(在此处插入 acoustic_demo.txt 中的典型代码块)
+
+### USER INPUT
+需求描述：[用户输入的结构化文本]
+```
+
+---
+
+## 3. 实施包 C：LangGraph 状态机实现 (Core Logic)
+
+### 3.1 状态定义 (Graph State)
+```python
+from typing import TypedDict, List, Annotated
+import operator
+
+class AgentState(TypedDict):
+    requirement: str
+    script: str
+    errors: List[dict]
+    attempts: int
+    history: Annotated[List[str], operator.add]
+```
+
+### 3.2 节点代码实现建议
+
+#### 节点 1: Generator (生成器)
+调用 LLM，注入 RAG 检索到的示例。
+```python
+def generator_node(state: AgentState):
+    # 1. 检索知识库获取相关 demo 片段
+    # 2. 构造 Prompt 并调用 LLM
+    # 3. 返回生成的脚本
+    return {"script": llm_response, "attempts": state["attempts"] + 1}
+```
+
+#### 节点 2: Validator (校验器)
+运行前文提到的 Docker 校验器。
+```python
+def validator_node(state: AgentState):
+    result = validate_afsim_script(save_to_temp(state["script"]))
+    return {"errors": result["errors"]}
+```
+
+#### 节点 3: Debugger (修复器)
+如果存在错误，分析报错并生成补丁。
+```python
+def debugger_node(state: AgentState):
+    # 将 state["errors"] 传给 LLM
+    # 要求 LLM 只输出修改建议或重写受影响的代码块
+    return {"script": refined_script}
+```
+
+---
+
+## 4. 实施包 D：黑盒错误诊断映射 (Error Mapping)
+
+这是系统最核心的“智能”所在。由于 AFSIM 报错可能涉及底层 C++ 堆栈，我们需要建立映射逻辑。
+
+### 4.1 典型错误映射表 (示例)
+
+| AFSIM 原始报错线索 (含 C++ 信息) | AI 诊断结论 (DSL 层) | 修复策略建议 |
+| :--- | :--- | :--- |
+| `std::out_of_range at platform.cpp:45` | 坐标或速度参数越界 | 检查 `route` 中的 `speed` 是否超过 1000 或坐标格式。 |
+| `Null pointer access in sensor_manager` | 传感器引用了不存在的 `signature` | 检查 `sensor` 块中的 `acoustic_signature` 名称是否拼错。 |
+| `Unexpected token 'end_platform'` | 块嵌套未闭合或多余 | 检查 `spectrum_data` 是否漏写了 `end_spectrum_data`。 |
+
+---
+
+## 5. 部署与集成路径 (Roadmap)
+
+1.  **第一周：基础设施**
+    *   构建 AFSIM Docker 镜像。
+    *   实现 Python 基础校验包装器。
+2.  **第二周：知识库与生成**
+    *   对 `acoustic_demo.txt` 进行向量化分块。
+    *   调试初版生成 Prompt，确保一次通过率 > 30%。
+3.  **第三周：闭环开发**
+    *   编写 LangGraph 逻辑，连接生成、校验和修复节点。
+    *   实现错误解析器的正则规则库。
+4.  **第四周：调优与 UI**
+    *   针对复杂场景（多平台、复杂航线）进行压力测试。
+    *   开发前端界面，实时展示“AI 思考 -> 校验失败 -> AI 自动修复”的过程。
+
+---
+
+## 6. 开发者提示 (Tips)
+*   **温度设置**：生成脚本时，LLM 的 `temperature` 建议设为 `0.1`，以保证输出的稳定性。
+*   **缓存机制**：对于常见的 DSL 模块（如标准的 `ACOUSTIC_SIGNATURE`），可以建立本地缓存，减少 LLM 调用。
+*   **安全校验**：在执行 `afsim_cli` 前，先用正则检查脚本中是否包含非法系统指令。

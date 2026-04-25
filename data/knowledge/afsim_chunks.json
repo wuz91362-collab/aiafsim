@@ -1,0 +1,20 @@
+[
+  {
+    "chunk_id": "DSL_001",
+    "category": "acoustic_signature",
+    "content": "acoustic_signature SIG_A ... spectrum_data ... end_spectrum_data ... end_acoustic_signature",
+    "keywords": ["acoustic", "signature", "spectrum", "freq", "noise_pressure"]
+  },
+  {
+    "chunk_id": "DSL_002",
+    "category": "platform_type",
+    "content": "platform_type SUB_TYPE WSF_PLATFORM ... sensor SONAR_A ... end_sensor ... end_platform_type",
+    "keywords": ["platform_type", "sensor", "type", "icon", "platform"]
+  },
+  {
+    "chunk_id": "DSL_003",
+    "category": "platform_instance",
+    "content": "platform blue_sub SUB_TYPE side blue position 30n 30e route ... end_route end_platform",
+    "keywords": ["platform", "route", "position", "side", "kts", "deg"]
+  }
+]
